@@ -342,7 +342,20 @@ export default {
                     const 协议类型 = (url.searchParams.has('surge') || ua.includes('surge')) ? 'tro' + 'jan' : config_JSON.协议类型;
                     let 订阅内容 = '';
                     if (订阅类型 === 'mixed') {
-                        const 节点路径 = config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH;
+                        // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                        const defenderFromQuery = url.searchParams.get('x-van-defender');
+                        const defenderFromHeader = request.headers.get('x-van-defender');
+                        const cookies = request.headers.get('Cookie') || '';
+                        const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+                        const defenderFromKV = await env.KV.get('x-van-defender') || '';
+                        const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+                        const defenderParamInPath = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
+
+                        // 在 path 内附加 x-van-defender
+                        const 节点路径 = config_JSON.启用0RTT
+                            ? config_JSON.PATH + '?ed=2560' + defenderParamInPath
+                            : config_JSON.PATH + (defenderParamInPath ? '?' + defenderParamInPath.substring(1) : '');
+
                         const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
                         let 完整优选IP = [], 其他节点LINK = '';
 
