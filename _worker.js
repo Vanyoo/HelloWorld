@@ -343,10 +343,13 @@ export default {
                             return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议}&host=example.com&sni=example.com&path=${encodeURIComponent(config_JSON.随机路径 ? 随机路径() + 节点路径 : 节点路径) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
                         }).filter(item => item !== null).join('\n');
                     } else { // 订阅转换
-                        // 从 cookie 或 KV 读取 x-van-defender
+                        // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                        const defenderFromQuery = url.searchParams.get('x-van-defender');
+                        const defenderFromHeader = request.headers.get('x-van-defender');
                         const cookies = request.headers.get('Cookie') || '';
-                        const defenderCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                        const defenderToken = defenderCookie || await env.KV.get('x-van-defender') || '';
+                        const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+                        const defenderFromKV = await env.KV.get('x-van-defender') || '';
+                        const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
                         const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
                         
                         const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : '') + defenderParam)}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
@@ -378,9 +381,12 @@ export default {
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
                 if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
-                    // 优先从 cookie 读取，其次从 KV 读取
-                    const defenderCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                    const defenderToken = defenderCookie || await env.KV.get('x-van-defender') || '';
+                    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                    const defenderFromQuery = url.searchParams.get('x-van-defender');
+                    const defenderFromHeader = request.headers.get('x-van-defender');
+                    const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+                    const defenderFromKV = await env.KV.get('x-van-defender') || '';
+                    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
                     const headers = { 'Referer': 'https://speed.cloudflare.com/' };
                     if (defenderToken) headers['x-van-defender'] = defenderToken;
                     return fetch(new Request('https://speed.cloudflare.com/locations', { headers }));
