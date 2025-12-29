@@ -199,12 +199,12 @@ export default {
                             return new Response(JSON.stringify({ error: '保存自定义IP失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                         }
                     } else return new Response(JSON.stringify({ error: '不支持的POST请求路径' }), { status: 404, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-                } else if (访问路径 === 'admin/config.json') {// 处理 admin/config.json 请求，返回JSON
-                    // 临时修改config_JSON中的TOKEN，在其后面拼上'&x-van-defender='从KV中读取的值
+                } else if (访问路径 === 'admin/config.json') {// 处理 admin/config.json 请求,返回JSON
+                    // 临时修改config_JSON中的TOKEN,在其后面拼上'&x-van-defender='从KV中读取的值
                     const defenderValue = await env.KV.get('x-van-defender') || '';
                     const modifiedConfig = JSON.parse(JSON.stringify(config_JSON)); // 深拷贝
-                    if (defenderValue && modifiedConfig.TOKEN) {
-                        modifiedConfig.TOKEN += `&x-van-defender=${defenderValue}`;
+                    if (defenderValue && modifiedConfig.优选订阅生成?.TOKEN) {
+                        modifiedConfig.优选订阅生成.TOKEN += `&x-van-defender=${defenderValue}`;
                     }
                     return new Response(JSON.stringify(modifiedConfig, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
                 } else if (区分大小写访问路径 === 'admin/ADD.txt') {// 处理 admin/ADD.txt 请求，返回本地优选IP
