@@ -144,11 +144,11 @@ export default {
                     return new Response(JSON.stringify(检测代理响应, null, 2), { status: 200, headers: responseHeaders });
                 }
 
-                config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
+                config_JSON = await 读取config_JSON(env, host, userID, env.PATH, request);
 
                 if (访问路径 === 'admin/init') {// 重置配置为默认值
                     try {
-                        config_JSON = await 读取config_JSON(env, host, userID, env.PATH, true);
+                        config_JSON = await 读取config_JSON(env, host, userID, env.PATH, request, true);
                         ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Init_Config', config_JSON));
                         config_JSON.init = '配置已重置为默认值';
                         const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
@@ -302,7 +302,7 @@ export default {
             } else if (访问路径 === 'sub') {//处理订阅请求 
                 const 订阅TOKEN = await MD5MD5(host + userID);
                 if (url.searchParams.get('token') === 订阅TOKEN) {
-                    config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
+                    config_JSON = await 读取config_JSON(env, host, userID, env.PATH, request);
                     ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Get_SUB', config_JSON));
                     const ua = UA.toLowerCase();
                     const expire = 4102329600;//2099-12-31 到期时间
@@ -1062,7 +1062,7 @@ function 批量替换域名(内容, hosts, 每组数量 = 2) {
     });
 }
 
-async function 读取config_JSON(env, hostname, userID, path, 重置配置 = false) {
+async function 读取config_JSON(env, hostname, userID, path, request, 重置配置 = false) {
     //const host = 随机替换通配符(hostname);
     const host = hostname;
     const 初始化开始时间 = performance.now();
@@ -1142,8 +1142,14 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
     config_JSON.PATH = path ? (path.startsWith('/') ? path : '/' + path) : (config_JSON.反代.SOCKS5.启用 ? ('/' + config_JSON.反代.SOCKS5.启用 + (config_JSON.反代.SOCKS5.全局 ? '://' : '=') + config_JSON.反代.SOCKS5.账号) : (config_JSON.反代.PROXYIP === 'auto' ? '/' : `/proxyip=${config_JSON.反代.PROXYIP}`));
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
     
-    // 从 KV 读取 x-van-defender 并添加到订阅链接
-    const defenderToken = await env.KV.get('x-van-defender');
+    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+    const urlObj = new URL(request.url);
+    const defenderFromQuery = urlObj.searchParams.get('x-van-defender');
+    const defenderFromHeader = request.headers.get('x-van-defender');
+    const cookies = request.headers.get('Cookie') || '';
+    const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+    const defenderFromKV = await env.KV.get('x-van-defender') || '';
+    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
     const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
     
     config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}${defenderParam}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
