@@ -3,6 +3,12 @@ let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反
 let 缓存反代IP, 缓存反代解析数组, 缓存反代数组索引 = 0, 启用反代兜底 = true;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const Pages静态页面 = 'https://edt-pages.github.io';
+
+// 处理 x-van-defender cookie 设置的辅助函数
+function 设置DefenderCookie(headers, url) {
+    const defenderValue = url.searchParams.get('x-van-defender');
+    if (defenderValue) headers.set('Set-Cookie', `x-van-defender=${defenderValue}; Path=/; Max-Age=31536000; SameSite=Lax`);
+}
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
     async fetch(request, env, ctx) {
@@ -32,9 +38,7 @@ export default {
                 headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
                 headers.set('Pragma', 'no-cache');
                 headers.set('Expires', '0');
-                // 从 querystring 获取 x-van-defender 并设置 cookie
-                const defenderValue = url.searchParams.get('x-van-defender');
-                if (defenderValue) headers.set('Set-Cookie', `x-van-defender=${defenderValue}; Path=/; Max-Age=31536000; SameSite=Lax`);
+                设置DefenderCookie(headers, url);
                 return new Response(response.body, { status: 404, statusText: response.statusText, headers });
             }
             if (!env.KV) {
@@ -43,9 +47,7 @@ export default {
                 headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
                 headers.set('Pragma', 'no-cache');
                 headers.set('Expires', '0');
-                // 从 querystring 获取 x-van-defender 并设置 cookie
-                const defenderValue = url.searchParams.get('x-van-defender');
-                if (defenderValue) headers.set('Set-Cookie', `x-van-defender=${defenderValue}; Path=/; Max-Age=31536000; SameSite=Lax`);
+                设置DefenderCookie(headers, url);
                 return new Response(response.body, { status: 404, statusText: response.statusText, headers });
             }
             const 访问路径 = url.pathname.slice(1).toLowerCase();
@@ -53,44 +55,59 @@ export default {
             if (访问路径 === 加密秘钥 && 加密秘钥 !== '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改') {//快速订阅
                 const params = new URLSearchParams(url.search);
                 params.set('token', await MD5MD5(host + userID));
-                return new Response('重定向中...', { status: 302, headers: { 'Location': `/sub?${params.toString()}` } });
+                const headers = { 'Location': `/sub?${params.toString()}` };
+                设置DefenderCookie(new Headers(headers), url);
+                return new Response('重定向中...', { status: 302, headers });
             } else if (访问路径 === 'login') {//处理登录页面和登录请求
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
-                if (authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/admin' } });
+                if (authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
+                    const headers = { 'Location': '/admin' };
+                    设置DefenderCookie(new Headers(headers), url);
+                    return new Response('重定向中...', { status: 302, headers });
+                }
                 if (request.method === 'POST') {
                     const formData = await request.text();
                     const params = new URLSearchParams(formData);
                     const 输入密码 = params.get('password');
                     if (输入密码 === 管理员密码) {
                         // 密码正确，设置cookie并返回成功标记
-                        const 响应 = new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-                        响应.headers.set('Set-Cookie', `auth=${await MD5MD5(UA + 加密秘钥 + 管理员密码)}; Path=/; Max-Age=86400; HttpOnly`);
-                        return 响应;
+                        const 响应Headers = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                        响应Headers.set('Set-Cookie', `auth=${await MD5MD5(UA + 加密秘钥 + 管理员密码)}; Path=/; Max-Age=86400; HttpOnly`);
+                        设置DefenderCookie(响应Headers, url);
+                        return new Response(JSON.stringify({ success: true }), { status: 200, headers: 响应Headers });
                     }
                 }
                 return fetch(Pages静态页面 + '/login').then(async (response) => {
                     const headers = new Headers(response.headers);
-                    // 从 querystring 获取 x-van-defender 并设置 cookie
-                    const defenderValue = url.searchParams.get('x-van-defender');
-                    if (defenderValue) headers.set('Set-Cookie', `x-van-defender=${defenderValue}; Path=/; Max-Age=31536000; SameSite=Lax`);
+                    设置DefenderCookie(headers, url);
                     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
                 });
             } else if (访问路径 === 'admin' || 访问路径.startsWith('admin/')) {//验证cookie后响应管理页面
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
                 // 没有cookie或cookie错误，跳转到/login页面
-                if (!authCookie || authCookie !== await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
+                if (!authCookie || authCookie !== await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
+                    const headers = { 'Location': '/login' };
+                    设置DefenderCookie(new Headers(headers), url);
+                    return new Response('重定向中...', { status: 302, headers });
+                }
                 if (访问路径 === 'admin/log.json') {// 读取日志内容
                     const 读取日志内容 = await env.KV.get('log.json') || '[]';
-                    return new Response(读取日志内容, { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                    设置DefenderCookie(responseHeaders, url);
+                    return new Response(读取日志内容, { status: 200, headers: responseHeaders });
                 } else if (区分大小写访问路径 === 'admin/getCloudflareUsage') {// 查询请求量
                     try {
                         const Usage_JSON = await getCloudflareUsage(url.searchParams.get('Email'), url.searchParams.get('GlobalAPIKey'), url.searchParams.get('AccountID'), url.searchParams.get('APIToken'), env, request);
-                        return new Response(JSON.stringify(Usage_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                        const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
+                        设置DefenderCookie(responseHeaders, url);
+                        return new Response(JSON.stringify(Usage_JSON, null, 2), { status: 200, headers: responseHeaders });
                     } catch (err) {
                         const errorResponse = { msg: '查询请求量失败，失败原因：' + err.message, error: err.message };
-                        return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                        设置DefenderCookie(responseHeaders, url);
+                        return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: responseHeaders });
                     }
                 } else if (区分大小写访问路径 === 'admin/getADDAPI') {// 验证优选API
                     if (url.searchParams.get('url')) {
@@ -98,13 +115,19 @@ export default {
                         try {
                             new URL(待验证优选URL);
                             const 优选API的IP = await 请求优选API([待验证优选URL], url.searchParams.get('port') || '443');
-                            return new Response(JSON.stringify({ success: true, data: 优选API的IP }, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ success: true, data: 优选API的IP }, null, 2), { status: 200, headers: responseHeaders });
                         } catch (err) {
                             const errorResponse = { msg: '验证优选API失败，失败原因：' + err.message, error: err.message };
-                            return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: responseHeaders });
                         }
                     }
-                    return new Response(JSON.stringify({ success: false, data: [] }, null, 2), { status: 403, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                    设置DefenderCookie(responseHeaders, url);
+                    return new Response(JSON.stringify({ success: false, data: [] }, null, 2), { status: 403, headers: responseHeaders });
                 } else if (访问路径 === 'admin/check') {// SOCKS5代理检查
                     let 检测代理响应;
                     if (url.searchParams.has('socks5')) {
@@ -112,9 +135,13 @@ export default {
                     } else if (url.searchParams.has('http')) {
                         检测代理响应 = await SOCKS5可用性验证('http', url.searchParams.get('http'));
                     } else {
-                        return new Response(JSON.stringify({ error: '缺少代理参数' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                        设置DefenderCookie(responseHeaders, url);
+                        return new Response(JSON.stringify({ error: '缺少代理参数' }), { status: 400, headers: responseHeaders });
                     }
-                    return new Response(JSON.stringify(检测代理响应, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                    设置DefenderCookie(responseHeaders, url);
+                    return new Response(JSON.stringify(检测代理响应, null, 2), { status: 200, headers: responseHeaders });
                 }
 
                 config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
@@ -124,25 +151,37 @@ export default {
                         config_JSON = await 读取config_JSON(env, host, userID, env.PATH, true);
                         ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Init_Config', config_JSON));
                         config_JSON.init = '配置已重置为默认值';
-                        return new Response(JSON.stringify(config_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                        设置DefenderCookie(responseHeaders, url);
+                        return new Response(JSON.stringify(config_JSON, null, 2), { status: 200, headers: responseHeaders });
                     } catch (err) {
                         const errorResponse = { msg: '配置重置失败，失败原因：' + err.message, error: err.message };
-                        return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                        设置DefenderCookie(responseHeaders, url);
+                        return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: responseHeaders });
                     }
                 } else if (request.method === 'POST') {// 处理 KV 操作（POST 请求）
                     if (访问路径 === 'admin/config.json') { // 保存config.json配置
                         try {
                             const newConfig = await request.json();
                             // 验证配置完整性
-                            if (!newConfig.UUID || !newConfig.HOST) return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            if (!newConfig.UUID || !newConfig.HOST) {
+                                const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                                设置DefenderCookie(responseHeaders, url);
+                                return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: responseHeaders });
+                            }
 
                             // 保存到 KV
                             await env.KV.put('config.json', JSON.stringify(newConfig, null, 2));
                             ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
-                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: responseHeaders });
                         } catch (error) {
                             console.error('保存配置失败:', error);
-                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: responseHeaders });
                         }
                     } else if (访问路径 === 'admin/cf.json') { // 保存cf.json配置
                         try {
@@ -160,17 +199,23 @@ export default {
                                     CF_JSON.AccountID = newConfig.AccountID;
                                     CF_JSON.APIToken = newConfig.APIToken;
                                 } else {
-                                    return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                                    const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                                    设置DefenderCookie(responseHeaders, url);
+                                    return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: responseHeaders });
                                 }
                             }
 
                             // 保存到 KV
                             await env.KV.put('cf.json', JSON.stringify(CF_JSON, null, 2));
                             ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
-                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: responseHeaders });
                         } catch (error) {
                             console.error('保存配置失败:', error);
-                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: responseHeaders });
                         }
                     } else if (访问路径 === 'admin/tg.json') { // 保存tg.json配置
                         try {
@@ -179,26 +224,42 @@ export default {
                                 const TG_JSON = { BotToken: null, ChatID: null };
                                 await env.KV.put('tg.json', JSON.stringify(TG_JSON, null, 2));
                             } else {
-                                if (!newConfig.BotToken || !newConfig.ChatID) return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                                if (!newConfig.BotToken || !newConfig.ChatID) {
+                                    const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                                    设置DefenderCookie(responseHeaders, url);
+                                    return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: responseHeaders });
+                                }
                                 await env.KV.put('tg.json', JSON.stringify(newConfig, null, 2));
                             }
                             ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
-                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: responseHeaders });
                         } catch (error) {
                             console.error('保存配置失败:', error);
-                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: responseHeaders });
                         }
                     } else if (区分大小写访问路径 === 'admin/ADD.txt') { // 保存自定义优选IP
                         try {
                             const customIPs = await request.text();
                             await env.KV.put('ADD.txt', customIPs);// 保存到 KV
                             ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Custom_IPs', config_JSON));
-                            return new Response(JSON.stringify({ success: true, message: '自定义IP已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ success: true, message: '自定义IP已保存' }), { status: 200, headers: responseHeaders });
                         } catch (error) {
                             console.error('保存自定义IP失败:', error);
-                            return new Response(JSON.stringify({ error: '保存自定义IP失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                            设置DefenderCookie(responseHeaders, url);
+                            return new Response(JSON.stringify({ error: '保存自定义IP失败: ' + error.message }), { status: 500, headers: responseHeaders });
                         }
-                    } else return new Response(JSON.stringify({ error: '不支持的POST请求路径' }), { status: 404, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    } else {
+                        const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                        设置DefenderCookie(responseHeaders, url);
+                        return new Response(JSON.stringify({ error: '不支持的POST请求路径' }), { status: 404, headers: responseHeaders });
+                    }
                 } else if (访问路径 === 'admin/config.json') {// 处理 admin/config.json 请求,返回JSON
                     // 临时修改config_JSON中的TOKEN,在其后面拼上'&x-van-defender='从KV中读取的值
                     // 读取 x-van-defender，优先级：querystring > header > cookie > KV
@@ -212,27 +273,32 @@ export default {
                     if (defenderValue && modifiedConfig.优选订阅生成?.TOKEN) {
                         modifiedConfig.优选订阅生成.TOKEN += `&x-van-defender=${defenderValue}`;
                     }
-                    return new Response(JSON.stringify(modifiedConfig, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                    const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
+                    设置DefenderCookie(responseHeaders, url);
+                    return new Response(JSON.stringify(modifiedConfig, null, 2), { status: 200, headers: responseHeaders });
                 } else if (区分大小写访问路径 === 'admin/ADD.txt') {// 处理 admin/ADD.txt 请求，返回本地优选IP
                     let 本地优选IP = await env.KV.get('ADD.txt') || 'null';
                     if (本地优选IP == 'null') 本地优选IP = (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[1];
-                    return new Response(本地优选IP, { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8', 'asn': request.cf.asn } });
+                    const responseHeaders = new Headers({ 'Content-Type': 'text/plain;charset=utf-8', 'asn': request.cf.asn });
+                    设置DefenderCookie(responseHeaders, url);
+                    return new Response(本地优选IP, { status: 200, headers: responseHeaders });
                 } else if (访问路径 === 'admin/cf.json') {// CF配置文件
-                    return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    const responseHeaders = new Headers({ 'Content-Type': 'application/json;charset=utf-8' });
+                    设置DefenderCookie(responseHeaders, url);
+                    return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: responseHeaders });
                 }
 
                 ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
                 return fetch(Pages静态页面 + '/admin').then(async (response) => {
                     const headers = new Headers(response.headers);
-                    // 从 querystring 获取 x-van-defender 并设置 cookie
-                    const defenderValue = url.searchParams.get('x-van-defender');
-                    if (defenderValue) headers.set('Set-Cookie', `x-van-defender=${defenderValue}; Path=/; Max-Age=31536000; SameSite=Lax`);
+                    设置DefenderCookie(headers, url);
                     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
                 });
             } else if (访问路径 === 'logout') {//清除cookie并跳转到登录页面
-                const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
-                响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
-                return 响应;
+                const headers = new Headers({ 'Location': '/login' });
+                headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
+                设置DefenderCookie(headers, url);
+                return new Response('重定向中...', { status: 302, headers });
             } else if (访问路径 === 'sub') {//处理订阅请求 
                 const 订阅TOKEN = await MD5MD5(host + userID);
                 if (url.searchParams.get('token') === 订阅TOKEN) {
@@ -272,6 +338,7 @@ export default {
                                         : 'mixed';
 
                     if (!ua.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
+                    设置DefenderCookie(new Headers(responseHeaders), url);
                     const 协议类型 = (url.searchParams.has('surge') || ua.includes('surge')) ? 'tro' + 'jan' : config_JSON.协议类型;
                     let 订阅内容 = '';
                     if (订阅类型 === 'mixed') {
@@ -375,9 +442,12 @@ export default {
                     } else if (订阅类型 === 'clash') {
                         responseHeaders["content-type"] = 'application/x-yaml; charset=utf-8';
                     }
+                    设置DefenderCookie(new Headers(responseHeaders), url);
                     return new Response(订阅内容, { status: 200, headers: responseHeaders });
                 }
-                return new Response('无效的订阅TOKEN', { status: 403 });
+                const responseHeaders = new Headers({ 'Content-Type': 'text/plain; charset=utf-8' });
+                设置DefenderCookie(responseHeaders, url);
+                return new Response('无效的订阅TOKEN', { status: 403, headers: responseHeaders });
             } else if (访问路径 === 'locations') {//反代locations列表
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
@@ -405,7 +475,11 @@ export default {
             if (伪装页URL.toLowerCase().startsWith('http://')) 伪装页URL = 'https://' + 伪装页URL.substring(7);
             try { const u = new URL(伪装页URL); 伪装页URL = u.protocol + '//' + u.host; } catch (e) { 伪装页URL = 'nginx'; }
         }
-        if (伪装页URL === '1101') return new Response(await html1101(url.host, 访问IP), { status: 200, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+        if (伪装页URL === '1101') {
+            const responseHeaders = new Headers({ 'Content-Type': 'text/html; charset=UTF-8' });
+            设置DefenderCookie(responseHeaders, url);
+            return new Response(await html1101(url.host, 访问IP), { status: 200, headers: responseHeaders });
+        }
         try {
             const 反代URL = new URL(伪装页URL), 新请求头 = new Headers(request.headers);
             新请求头.set('Host', 反代URL.host);
@@ -414,7 +488,9 @@ export default {
             if (!新请求头.has('User-Agent') && UA && UA !== 'null') 新请求头.set('User-Agent', UA);
             return fetch(new Request(反代URL.protocol + 反代URL.host + url.pathname + url.search, { method: request.method, headers: 新请求头, body: request.body, cf: request.cf }));
         } catch (error) { }
-        return new Response(await nginx(), { status: 200, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+        const responseHeaders = new Headers({ 'Content-Type': 'text/html; charset=UTF-8' });
+        设置DefenderCookie(responseHeaders, url);
+        return new Response(await nginx(), { status: 200, headers: responseHeaders });
     }
 };
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
