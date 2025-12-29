@@ -222,6 +222,17 @@ export default {
                 响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
                 return 响应;
             } else if (访问路径 === 'sub') {//处理订阅请求
+                // 打印请求信息
+                console.log('[订阅请求] ========== 开始 ==========');
+                console.log('[订阅请求] URL:', request.url);
+                console.log('[订阅请求] Method:', request.method);
+                console.log('[订阅请求] User-Agent:', UA);
+                console.log('[订阅请求] IP:', 访问IP);
+                console.log('[订阅请求] Headers:', JSON.stringify([...request.headers]));
+                console.log('[订阅请求] Query Params:', JSON.stringify(Object.fromEntries(url.searchParams)));
+                console.log('[订阅请求] Cookie:', request.headers.get('Cookie') || 'none');
+                console.log('[订阅请求] ========== 结束 ==========');
+                
                 const 订阅TOKEN = await MD5MD5(host + userID);
                 if (url.searchParams.get('token') === 订阅TOKEN) {
                     config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
@@ -332,7 +343,13 @@ export default {
                             return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议}&host=example.com&sni=example.com&path=${encodeURIComponent(config_JSON.随机路径 ? 随机路径() + 节点路径 : 节点路径) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
                         }).filter(item => item !== null).join('\n');
                     } else { // 订阅转换
-                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+                        // 从 cookie 或 KV 读取 x-van-defender
+                        const cookies = request.headers.get('Cookie') || '';
+                        const defenderCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+                        const defenderToken = defenderCookie || await env.KV.get('x-van-defender') || '';
+                        const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
+                        
+                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : '') + defenderParam)}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
                         try {
                             const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
                             if (response.ok) {
@@ -363,9 +380,9 @@ export default {
                 if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
                     // 优先从 cookie 读取，其次从 KV 读取
                     const defenderCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                    const defenderToken = defenderCookie || await env.KV.get('X-van-defender') || '';
+                    const defenderToken = defenderCookie || await env.KV.get('x-van-defender') || '';
                     const headers = { 'Referer': 'https://speed.cloudflare.com/' };
-                    if (defenderToken) headers['X-van-defender'] = defenderToken;
+                    if (defenderToken) headers['x-van-defender'] = defenderToken;
                     return fetch(new Request('https://speed.cloudflare.com/locations', { headers }));
                 }
             }
@@ -1032,9 +1049,9 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
     config_JSON.PATH = path ? (path.startsWith('/') ? path : '/' + path) : (config_JSON.反代.SOCKS5.启用 ? ('/' + config_JSON.反代.SOCKS5.启用 + (config_JSON.反代.SOCKS5.全局 ? '://' : '=') + config_JSON.反代.SOCKS5.账号) : (config_JSON.反代.PROXYIP === 'auto' ? '/' : `/proxyip=${config_JSON.反代.PROXYIP}`));
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
     
-    // 从 KV 读取 X-van-defender 并添加到订阅链接
-    const defenderToken = await env.KV.get('X-van-defender');
-    const defenderParam = defenderToken ? `&X-van-defender=${encodeURIComponent(defenderToken)}` : '';
+    // 从 KV 读取 x-van-defender 并添加到订阅链接
+    const defenderToken = await env.KV.get('x-van-defender');
+    const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
     
     config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}${defenderParam}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
     config_JSON.优选订阅生成.TOKEN = await MD5MD5(hostname + userID);
@@ -1314,9 +1331,9 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env,
     if (request) {
         const cookies = request.headers.get('Cookie') || '';
         const defenderCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-        defenderToken = defenderCookie || (env ? await env.KV.get('X-van-defender') : null);
+        defenderToken = defenderCookie || (env ? await env.KV.get('x-van-defender') : null);
     } else {
-        defenderToken = env ? await env.KV.get('X-van-defender') : null;
+        defenderToken = env ? await env.KV.get('x-van-defender') : null;
     }
 
     try {
@@ -1324,7 +1341,7 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env,
 
         if (!AccountID) {
             const headers = { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
-            if (defenderToken) headers["X-van-defender"] = defenderToken;
+            if (defenderToken) headers["x-van-defender"] = defenderToken;
             const r = await fetch(`${API}/accounts`, {
                 method: "GET",
                 headers
@@ -1341,7 +1358,7 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env,
         const hdr = APIToken ? { ...cfg, "Authorization": `Bearer ${APIToken}` } : { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
 
         const graphqlHeaders = { ...hdr };
-        if (defenderToken) graphqlHeaders["X-van-defender"] = defenderToken;
+        if (defenderToken) graphqlHeaders["x-van-defender"] = defenderToken;
         const res = await fetch(`${API}/graphql`, {
             method: "POST",
             headers: graphqlHeaders,
