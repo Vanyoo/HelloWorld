@@ -425,7 +425,7 @@ export default {
                             const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
                             if (response.ok) {
                                 订阅内容 = await response.text();
-                                if (url.searchParams.has('surge') || ua.includes('surge')) 订阅内容 = surge(订阅内容, url.protocol + '//' + url.host + '/sub?token=' + 订阅TOKEN + '&surge', config_JSON);
+                                if (url.searchParams.has('surge') || ua.includes('surge')) 订阅内容 = await surge(订阅内容, url.protocol + '//' + url.host + '/sub?token=' + 订阅TOKEN + '&surge', config_JSON, request, env);
                             } else return new Response('订阅转换后端异常：' + response.statusText + '; 订阅地址：' + 订阅转换URL, { status: response.status });
                         } catch (error) {
                             return new Response('订阅转换后端异常：' + error.message + '; 订阅地址：' + 订阅转换URL, { status: 403 });
@@ -917,11 +917,21 @@ Connection: keep-alive\r
     }
 }
 //////////////////////////////////////////////////功能性函数///////////////////////////////////////////////
-function surge(content, url, config_JSON) {
+async function surge(content, url, config_JSON, request, env) {
     const 每行内容 = content.includes('\r\n') ? content.split('\r\n') : content.split('\n');
 
     let 输出内容 = "";
-	let realSurgePath = config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH;
+    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+    const urlObj = new URL(request.url);
+    const defenderFromQuery = urlObj.searchParams.get('x-van-defender');
+    const defenderFromHeader = request.headers.get('x-van-defender');
+    const cookies = request.headers.get('Cookie') || '';
+    const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+    const defenderFromKV = await env.KV.get('x-van-defender') || '';
+    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+    const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
+    
+	let realSurgePath = config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' + defenderParam : config_JSON.PATH + (defenderParam ? '?' + defenderParam.substring(1) : '');
     for (let x of 每行内容) {
         if (x.includes('= tro' + 'jan,')) {
             const host = x.split("sni=")[1].split(",")[0];
