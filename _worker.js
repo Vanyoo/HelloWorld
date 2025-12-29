@@ -60,7 +60,7 @@ export default {
                     return new Response(读取日志内容, { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                 } else if (区分大小写访问路径 === 'admin/getCloudflareUsage') {// 查询请求量
                     try {
-                        const Usage_JSON = await getCloudflareUsage(url.searchParams.get('Email'), url.searchParams.get('GlobalAPIKey'), url.searchParams.get('AccountID'), url.searchParams.get('APIToken'));
+                        const Usage_JSON = await getCloudflareUsage(url.searchParams.get('Email'), url.searchParams.get('GlobalAPIKey'), url.searchParams.get('AccountID'), url.searchParams.get('APIToken'), env);
                         return new Response(JSON.stringify(Usage_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
                     } catch (err) {
                         const errorResponse = { msg: '查询请求量失败，失败原因：' + err.message, error: err.message };
@@ -212,7 +212,8 @@ export default {
                         "Profile-web-page-url": url.protocol + '//' + url.host + '/admin',
                         "Subscription-Userinfo": `upload=${pagesSum}; download=${workersSum}; total=${total}; expire=${expire}`,
                         "Cache-Control": "no-store",
-                    };
+                    }
+
                     const isSubConverterRequest = request.headers.has('b64') || request.headers.has('base64') || request.headers.get('subconverter-request') || request.headers.get('subconverter-version') || ua.includes('subconverter') || ua.includes(('CF-Workers-SUB').toLowerCase());
                     const 订阅类型 = isSubConverterRequest
                         ? 'mixed'
@@ -327,7 +328,12 @@ export default {
             } else if (访问路径 === 'locations') {//反代locations列表
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
-                if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
+                if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
+                    const defenderToken = await env.KV.get('X-van-defender') || '';
+                    const headers = { 'Referer': 'https://speed.cloudflare.com/' };
+                    if (defenderToken) headers['X-van-defender'] = defenderToken;
+                    return fetch(new Request('https://speed.cloudflare.com/locations', { headers }));
+                }
             }
         } else if (管理员密码) {// ws代理
             await 反代参数获取(request);
@@ -744,7 +750,12 @@ async function httpConnect(targetHost, targetPort, initialData) {
     const socket = connect({ hostname, port }), writer = socket.writable.getWriter(), reader = socket.readable.getReader();
     try {
         const auth = username && password ? `Proxy-Authorization: Basic ${btoa(`${username}:${password}`)}\r\n` : '';
-        const request = `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r\nHost: ${targetHost}:${targetPort}\r\n${auth}User-Agent: Mozilla/5.0\r\nConnection: keep-alive\r\n\r\n`;
+        const request = `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r
+Host: ${targetHost}:${targetPort}\r
+${auth}User-Agent: Mozilla/5.0\r
+Connection: keep-alive\r
+\r
+`;
         await writer.write(new TextEncoder().encode(request));
 
         let responseBuffer = new Uint8Array(0), headerEndIndex = -1, bytesRead = 0;
@@ -986,7 +997,12 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
     config_JSON.UUID = userID;
     config_JSON.PATH = path ? (path.startsWith('/') ? path : '/' + path) : (config_JSON.反代.SOCKS5.启用 ? ('/' + config_JSON.反代.SOCKS5.启用 + (config_JSON.反代.SOCKS5.全局 ? '://' : '=') + config_JSON.反代.SOCKS5.账号) : (config_JSON.反代.PROXYIP === 'auto' ? '/' : `/proxyip=${config_JSON.反代.PROXYIP}`));
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
-    config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
+    
+    // 从 KV 读取 X-van-defender 并添加到订阅链接
+    const defenderToken = await env.KV.get('X-van-defender');
+    const defenderParam = defenderToken ? `&X-van-defender=${encodeURIComponent(defenderToken)}` : '';
+    
+    config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}${defenderParam}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
     config_JSON.优选订阅生成.TOKEN = await MD5MD5(hostname + userID);
 
     const 初始化TG_JSON = { BotToken: null, ChatID: null };
@@ -1016,7 +1032,7 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
             config_JSON.CF.GlobalAPIKey = CF_JSON.GlobalAPIKey ? 掩码敏感信息(CF_JSON.GlobalAPIKey) : null;
             config_JSON.CF.AccountID = CF_JSON.AccountID ? 掩码敏感信息(CF_JSON.AccountID) : null;
             config_JSON.CF.APIToken = CF_JSON.APIToken ? 掩码敏感信息(CF_JSON.APIToken) : null;
-            const Usage = await getCloudflareUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken);
+            const Usage = await getCloudflareUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken, env);
             config_JSON.CF.Usage = Usage;
         }
     } catch (error) {
@@ -1254,18 +1270,21 @@ async function 获取SOCKS5账号(address) {
     return { username, password, hostname, port };
 }
 
-async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken) {
+async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env) {
     const API = "https://api.cloudflare.com/client/v4";
     const sum = (a) => a?.reduce((t, i) => t + (i?.sum?.requests || 0), 0) || 0;
     const cfg = { "Content-Type": "application/json" };
+    const defenderToken = env ? await env.KV.get('X-van-defender') : null;
 
     try {
         if (!AccountID && (!Email || !GlobalAPIKey)) return { success: false, pages: 0, workers: 0, total: 0 };
 
         if (!AccountID) {
+            const headers = { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
+            if (defenderToken) headers["X-van-defender"] = defenderToken;
             const r = await fetch(`${API}/accounts`, {
                 method: "GET",
-                headers: { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey }
+                headers
             });
             if (!r.ok) throw new Error(`账户获取失败: ${r.status}`);
             const d = await r.json();
@@ -1278,9 +1297,11 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken) {
         now.setUTCHours(0, 0, 0, 0);
         const hdr = APIToken ? { ...cfg, "Authorization": `Bearer ${APIToken}` } : { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
 
+        const graphqlHeaders = { ...hdr };
+        if (defenderToken) graphqlHeaders["X-van-defender"] = defenderToken;
         const res = await fetch(`${API}/graphql`, {
             method: "POST",
-            headers: hdr,
+            headers: graphqlHeaders,
             body: JSON.stringify({
                 query: `query getBillingMetrics($AccountID: String!, $filter: AccountWorkersInvocationsAdaptiveFilter_InputObject) {
                     viewer { accounts(filter: {accountTag: $AccountID}) {
@@ -1443,7 +1464,11 @@ async function SOCKS5可用性验证(代理协议 = 'socks5', 代理参数) {
         if (!tcpSocket) return { success: false, error: '无法连接到代理服务器', proxy: 代理协议 + "://" + 完整代理参数, responseTime: Date.now() - startTime };
         try {
             const writer = tcpSocket.writable.getWriter(), encoder = new TextEncoder();
-            await writer.write(encoder.encode(`GET /cdn-cgi/trace HTTP/1.1\r\nHost: check.socks5.090227.xyz\r\nConnection: close\r\n\r\n`));
+            await writer.write(encoder.encode(`GET /cdn-cgi/trace HTTP/1.1\r
+Host: check.socks5.090227.xyz\r
+Connection: close\r
+\r
+`));
             writer.releaseLock();
             const reader = tcpSocket.readable.getReader(), decoder = new TextDecoder();
             let response = '';
