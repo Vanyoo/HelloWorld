@@ -338,9 +338,9 @@ export default {
                             if (response.ok) {
                                 订阅内容 = await response.text();
                                 if (url.searchParams.has('surge') || ua.includes('surge')) 订阅内容 = surge(订阅内容, url.protocol + '//' + url.host + '/sub?token=' + 订阅TOKEN + '&surge', config_JSON);
-                            } else return new Response('订阅转换后端异常：' + response.statusText, { status: response.status });
+                            } else return new Response('订阅转换后端异常：' + response.statusText + '; 订阅地址：' + 订阅转换URL, { status: response.status });
                         } catch (error) {
-                            return new Response('订阅转换后端异常：' + error.message, { status: 403 });
+                            return new Response('订阅转换后端异常：' + error.message + '; 订阅地址：' + 订阅转换URL, { status: 403 });
                         }
                     }
 
