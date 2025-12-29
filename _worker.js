@@ -201,7 +201,13 @@ export default {
                     } else return new Response(JSON.stringify({ error: '不支持的POST请求路径' }), { status: 404, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                 } else if (访问路径 === 'admin/config.json') {// 处理 admin/config.json 请求,返回JSON
                     // 临时修改config_JSON中的TOKEN,在其后面拼上'&x-van-defender='从KV中读取的值
-                    const defenderValue = await env.KV.get('x-van-defender') || '';
+                    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                    const defenderFromQuery = url.searchParams.get('x-van-defender');
+                    const defenderFromHeader = request.headers.get('x-van-defender');
+                    const cookies = request.headers.get('Cookie') || '';
+                    const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
+                    const defenderFromKV = await env.KV.get('x-van-defender') || '';
+                    const defenderValue = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
                     const modifiedConfig = JSON.parse(JSON.stringify(config_JSON)); // 深拷贝
                     if (defenderValue && modifiedConfig.优选订阅生成?.TOKEN) {
                         modifiedConfig.优选订阅生成.TOKEN += `&x-van-defender=${defenderValue}`;
