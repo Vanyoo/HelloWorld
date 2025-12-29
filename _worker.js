@@ -329,9 +329,9 @@ export default {
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
                 if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
-                    const defenderToken = await env.KV.get('X-van-defender') || '';
+                    const defenderToken = await env.KV.get('x-van-defender') || '';
                     const headers = { 'Referer': 'https://speed.cloudflare.com/' };
-                    if (defenderToken) headers['X-van-defender'] = defenderToken;
+                    if (defenderToken) headers['x-van-defender'] = defenderToken;
                     return fetch(new Request('https://speed.cloudflare.com/locations', { headers }));
                 }
             }
@@ -998,9 +998,9 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
     config_JSON.PATH = path ? (path.startsWith('/') ? path : '/' + path) : (config_JSON.反代.SOCKS5.启用 ? ('/' + config_JSON.反代.SOCKS5.启用 + (config_JSON.反代.SOCKS5.全局 ? '://' : '=') + config_JSON.反代.SOCKS5.账号) : (config_JSON.反代.PROXYIP === 'auto' ? '/' : `/proxyip=${config_JSON.反代.PROXYIP}`));
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
     
-    // 从 KV 读取 X-van-defender 并添加到订阅链接
-    const defenderToken = await env.KV.get('X-van-defender');
-    const defenderParam = defenderToken ? `&X-van-defender=${encodeURIComponent(defenderToken)}` : '';
+    // 从 KV 读取 x-van-defender 并添加到订阅链接
+    const defenderToken = await env.KV.get('x-van-defender');
+    const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
     
     config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}${defenderParam}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
     config_JSON.优选订阅生成.TOKEN = await MD5MD5(hostname + userID);
@@ -1274,14 +1274,14 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env)
     const API = "https://api.cloudflare.com/client/v4";
     const sum = (a) => a?.reduce((t, i) => t + (i?.sum?.requests || 0), 0) || 0;
     const cfg = { "Content-Type": "application/json" };
-    const defenderToken = env ? await env.KV.get('X-van-defender') : null;
+    const defenderToken = env ? await env.KV.get('x-van-defender') : null;
 
     try {
         if (!AccountID && (!Email || !GlobalAPIKey)) return { success: false, pages: 0, workers: 0, total: 0 };
 
         if (!AccountID) {
             const headers = { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
-            if (defenderToken) headers["X-van-defender"] = defenderToken;
+            if (defenderToken) headers["x-van-defender"] = defenderToken;
             const r = await fetch(`${API}/accounts`, {
                 method: "GET",
                 headers
@@ -1298,7 +1298,7 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env)
         const hdr = APIToken ? { ...cfg, "Authorization": `Bearer ${APIToken}` } : { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
 
         const graphqlHeaders = { ...hdr };
-        if (defenderToken) graphqlHeaders["X-van-defender"] = defenderToken;
+        if (defenderToken) graphqlHeaders["x-van-defender"] = defenderToken;
         const res = await fetch(`${API}/graphql`, {
             method: "POST",
             headers: graphqlHeaders,
