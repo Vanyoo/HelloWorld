@@ -261,14 +261,14 @@ export default {
                         return new Response(JSON.stringify({ error: '不支持的POST请求路径' }), { status: 404, headers: responseHeaders });
                     }
                 } else if (访问路径 === 'admin/config.json') {// 处理 admin/config.json 请求,返回JSON
-                    // 临时修改config_JSON中的TOKEN,在其后面拼上'&x-van-defender='从KV中读取的值
-                    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                    // 临时修改config_JSON中的TOKEN,在其后面拼上'&x-van-defender='从环境变量中读取的值
+                    // 读取 x-van-defender，优先级：querystring > header > cookie > ENV
                     const defenderFromQuery = url.searchParams.get('x-van-defender');
                     const defenderFromHeader = request.headers.get('x-van-defender');
                     const cookies = request.headers.get('Cookie') || '';
                     const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                    const defenderFromKV = await env.KV.get('x-van-defender') || '';
-                    const defenderValue = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+                    const defenderFromEnv = env['x-van-defender'] || '';
+                    const defenderValue = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromEnv;
                     const modifiedConfig = JSON.parse(JSON.stringify(config_JSON)); // 深拷贝
                     if (defenderValue && modifiedConfig.优选订阅生成?.TOKEN) {
                         modifiedConfig.优选订阅生成.TOKEN += `&x-van-defender=${defenderValue}`;
@@ -342,13 +342,13 @@ export default {
                     const 协议类型 = (url.searchParams.has('surge') || ua.includes('surge')) ? 'tro' + 'jan' : config_JSON.协议类型;
                     let 订阅内容 = '';
                     if (订阅类型 === 'mixed') {
-                        // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                        // 读取 x-van-defender，优先级：querystring > header > cookie > ENV
                         const defenderFromQuery = url.searchParams.get('x-van-defender');
                         const defenderFromHeader = request.headers.get('x-van-defender');
                         const cookies = request.headers.get('Cookie') || '';
                         const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                        const defenderFromKV = await env.KV.get('x-van-defender') || '';
-                        const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+                        const defenderFromEnv = env['x-van-defender'] || '';
+                        const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromEnv;
                         const defenderParamInPath = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
 
                         // 在 path 内附加 x-van-defender
@@ -424,13 +424,13 @@ export default {
                             return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议}&host=example.com&sni=example.com&path=${encodeURIComponent(config_JSON.随机路径 ? 随机路径() + 节点路径 : 节点路径) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
                         }).filter(item => item !== null).join('\n');
                     } else { // 订阅转换
-                        // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                        // 读取 x-van-defender，优先级：querystring > header > cookie > ENV
                         const defenderFromQuery = url.searchParams.get('x-van-defender');
                         const defenderFromHeader = request.headers.get('x-van-defender');
                         const cookies = request.headers.get('Cookie') || '';
                         const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                        const defenderFromKV = await env.KV.get('x-van-defender') || '';
-                        const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+                        const defenderFromEnv = env['x-van-defender'] || '';
+                        const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromEnv;
                         const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
                         
                         const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : '') + defenderParam)}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
@@ -465,12 +465,12 @@ export default {
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
                 if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) {
-                    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+                    // 读取 x-van-defender，优先级：querystring > header > cookie > ENV
                     const defenderFromQuery = url.searchParams.get('x-van-defender');
                     const defenderFromHeader = request.headers.get('x-van-defender');
                     const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-                    const defenderFromKV = await env.KV.get('x-van-defender') || '';
-                    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+                    const defenderFromEnv = env['x-van-defender'] || '';
+                    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromEnv;
                     const headers = { 'Referer': 'https://speed.cloudflare.com/' };
                     if (defenderToken) headers['x-van-defender'] = defenderToken;
                     return fetch(new Request('https://speed.cloudflare.com/locations', { headers }));
@@ -934,14 +934,14 @@ async function surge(content, url, config_JSON, request, env) {
     const 每行内容 = content.includes('\r\n') ? content.split('\r\n') : content.split('\n');
 
     let 输出内容 = "";
-    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+    // 读取 x-van-defender，优先级：querystring > header > cookie > ENV
     const urlObj = new URL(request.url);
     const defenderFromQuery = urlObj.searchParams.get('x-van-defender');
     const defenderFromHeader = request.headers.get('x-van-defender');
     const cookies = request.headers.get('Cookie') || '';
     const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-    const defenderFromKV = await env.KV.get('x-van-defender') || '';
-    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+    const defenderFromEnv = env['x-van-defender'] || '';
+    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromEnv;
     const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
     
 	let realSurgePath = config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' + defenderParam : config_JSON.PATH + (defenderParam ? '?' + defenderParam.substring(1) : '');
@@ -1155,14 +1155,14 @@ async function 读取config_JSON(env, hostname, userID, path, request, 重置配
     config_JSON.PATH = path ? (path.startsWith('/') ? path : '/' + path) : (config_JSON.反代.SOCKS5.启用 ? ('/' + config_JSON.反代.SOCKS5.启用 + (config_JSON.反代.SOCKS5.全局 ? '://' : '=') + config_JSON.反代.SOCKS5.账号) : (config_JSON.反代.PROXYIP === 'auto' ? '/' : `/proxyip=${config_JSON.反代.PROXYIP}`));
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
     
-    // 读取 x-van-defender，优先级：querystring > header > cookie > KV
+    // 读取 x-van-defender，优先级：querystring > header > cookie > ENV
     const urlObj = new URL(request.url);
     const defenderFromQuery = urlObj.searchParams.get('x-van-defender');
     const defenderFromHeader = request.headers.get('x-van-defender');
     const cookies = request.headers.get('Cookie') || '';
     const defenderFromCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-    const defenderFromKV = await env.KV.get('x-van-defender') || '';
-    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromKV;
+    const defenderFromEnv = env['x-van-defender'] || '';
+    const defenderToken = defenderFromQuery || defenderFromHeader || defenderFromCookie || defenderFromEnv;
     const defenderParam = defenderToken ? `&x-van-defender=${encodeURIComponent(defenderToken)}` : '';
     
     config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}${defenderParam}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
@@ -1438,14 +1438,14 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken, env,
     const sum = (a) => a?.reduce((t, i) => t + (i?.sum?.requests || 0), 0) || 0;
     const cfg = { "Content-Type": "application/json" };
     
-    // 优先从 cookie 读取，其次从 KV 读取
+    // 优先从 cookie 读取，其次从 ENV 读取
     let defenderToken = null;
     if (request) {
         const cookies = request.headers.get('Cookie') || '';
         const defenderCookie = cookies.split(';').find(c => c.trim().startsWith('x-van-defender='))?.split('=')[1];
-        defenderToken = defenderCookie || (env ? await env.KV.get('x-van-defender') : null);
+        defenderToken = defenderCookie || (env ? env['x-van-defender'] : null);
     } else {
-        defenderToken = env ? await env.KV.get('x-van-defender') : null;
+        defenderToken = env ? env['x-van-defender'] : null;
     }
 
     try {
